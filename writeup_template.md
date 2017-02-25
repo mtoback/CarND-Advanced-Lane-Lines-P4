@@ -18,8 +18,8 @@ The goals / steps of this project are the following:
 
 [//]: # (Image References)
 
-[image0]: ./camera_cal/calibration_10.jpg "Original Distorted"
-[image1]: ./undistort_calibration_10.jpg "Undistorted checkerboard"
+[image0]: ./camera_cal/calibration10.jpg "Original Distorted"
+[image1]: ./undistort_calibration10.jpg "Undistorted checkerboard"
 [image2]: ./test_images/test1.jpg "Distorted Test Image"
 [image3]: ./preprocessed_image.jpg "Thresholded Image"
 [image4]: ./source_image.jpg "Pre-Warp Image"
