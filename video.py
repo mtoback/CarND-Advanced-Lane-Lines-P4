@@ -31,7 +31,6 @@ class Video():
             
 def main():
     video_proc = Video(3, debug=False)
-    #image_proc.process_images('./test_images/test*.jpg')
     video_proc.run_video('challenge_video.mp4', 'output_images/challenge_output.mp4')
 if __name__ == "__main__":
     main()

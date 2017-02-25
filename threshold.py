@@ -72,3 +72,4 @@ class Threshold():
         output = np.zeros_like(s_channel)
         output[(s_binary == 1) & (v_binary == 1)] = 1
         return output
+    

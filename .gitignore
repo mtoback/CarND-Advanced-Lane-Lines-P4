@@ -2,5 +2,10 @@
 .pydevproject
 __pycache__
 *.p
-test_images/track*.jpg
+test_images/tracked0.jpg
+test_images/tracked1.jpg
+test_images/tracked2.jpg
+test_images/tracked3.jpg
+test_images/tracked4.jpg
+test_images/tracked5.jpg
 output_images/*.mp4

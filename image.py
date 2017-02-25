@@ -3,6 +3,7 @@ import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+from skimage.feature._canny import canny
 from threshold import Threshold
 from tracker import tracker
 
@@ -17,7 +18,7 @@ class Image():
         self.mid_width = 0.12 # percent of middle trapezoid height
         self.height_pct = 0.62 # percent for trapezoid height
         self.bottom_trim = 0.935 # percent from top to bottom to avoid car hood
-        self.threshold = Threshold(ksize)
+        self.threshold = Threshold(3)
     
     def window_mask(self, width, height, img_ref, center, level):
         output = np.zeros_like(img_ref)
@@ -34,9 +35,51 @@ class Image():
         cv2.line(image, (src[3][0],src[3][1] ), (src[0][0], src[0][1]),( 110, 220, 0 ),5)
         return image
 
-    def draw_curves(self, image, window_centroids, warped,
-                    window_width, window_height, 
-                    Minv, curve_centers):
+    def calc_curves(self, image):
+        # A function that takes an image, object points, and image points
+        # performs the camera calibration, image distortion correction and 
+        # returns the undistorted image
+        image = cv2.undistort(image, self.mtx, self.dist, None, self.mtx)
+        preprocessImage = np.zeros_like(image[:,:,0])
+        # calculate the various thresholds
+        gradx = self.threshold.abs_sobel_thresh(image, orient='x', thresh=(12, 255))
+        grady = self.threshold.abs_sobel_thresh(image, orient='y',  thresh=(25, 255))
+        c_binary = self.threshold.color_threshold(image, s_threshold=(100,255), v_threshold=(50, 255))
+        # form a combination of thresholds
+        preprocessImage[((gradx == 1) & (grady == 1)) | (c_binary == 1)] = 255
+        
+        # work on defining perspective transformation area
+        img_size = (image.shape[1], image.shape[0])
+        src = np.float32([[image.shape[1]*(0.535 - self.mid_width/2), image.shape[0]*self.height_pct],
+                          [image.shape[1]*(0.5 + self.mid_width/2), image.shape[0]*self.height_pct],
+                          [image.shape[1]*(0.495 + self.bot_width/2), self.bottom_trim*image.shape[0]],
+                          [image.shape[1]*(0.56 - self.bot_width/2), self.bottom_trim*image.shape[0]]])
+        
+        #for debugging, draw the trapezoid on the image
+        if self.debug:
+            image = self.draw_trapezoid(image, src)
+            
+        offset = img_size[0]*0.25
+        dst = np.float32([[offset,0], 
+                          [img_size[0] - offset, 0],
+                          [img_size[0] - offset, img_size[1]],
+                          [offset, img_size[1]]])
+        M = cv2.getPerspectiveTransform(src, dst)
+        Minv = cv2.getPerspectiveTransform(dst, src)
+        warped = cv2.warpPerspective(preprocessImage, M, img_size, flags=cv2.INTER_LINEAR)
+        
+        window_width = 25
+        window_height = 80
+        
+        # set up the overall class to do all the tracking
+        curve_centers = tracker(Mywindow_width = window_width,
+                                Mywindow_height = window_height,
+                                Mymargin = 25,
+                                My_ym = 10/720,
+                                My_xm = 4/384,
+                                Mysmooth_factor = 15)
+        window_centroids = curve_centers.find_window_centroids(warped)
+        
         # points used to draw all  the left and right windows
         l_points = np.zeros_like(warped)
         r_points = np.zeros_like(warped)
@@ -62,10 +105,10 @@ class Image():
             leftx.append(window_centroids[level][0])
             rightx.append(window_centroids[level][1])
             
-        # Add graphic points from window mask here to total pixels found
-        l_points[(l_points == 255) | ((l_mask == 1)) ] = 255
-        r_points[(r_points == 255) | ((r_mask == 1)) ] = 255
-        img_size = (image.shape[1], image.shape[0])
+            # Add graphic points from window mask here to total pixels found
+            l_points[(l_points == 255) | ((l_mask == 1)) ] = 255
+            r_points[(r_points == 255) | ((r_mask == 1)) ] = 255
+        
         # Draw the results
         template = np.array(r_points + l_points, np.uint8) # add both left and right window pixels together
         zero_channel = np.zeros_like(template) # create a zero color channel
@@ -150,56 +193,6 @@ class Image():
         cv2.putText(result, 'Vehicle is  = ' + str(abs(round(center_diff, 3))) +
                     'm ' + side_pos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255),2)
         return result
-    
-    def calc_curves(self, image):
-        # A function that takes an image, object points, and image points
-        # performs the camera calibration, image distortion correction and 
-        # returns the undistorted image
-        image = cv2.undistort(image, self.mtx, self.dist, None, self.mtx)
-        preprocessImage = np.zeros_like(image[:,:,0])
-        # calculate the various thresholds
-        gradx = self.threshold.abs_sobel_thresh(image, orient='x', thresh=(12, 255))
-        grady = self.threshold.abs_sobel_thresh(image, orient='y',  thresh=(25, 255))
-        c_binary = self.threshold.color_threshold(image, s_threshold=(100,255), v_threshold=(50, 255))
-        # form a combination of thresholds
-        preprocessImage[((gradx == 1) & (grady == 1)) | (c_binary == 1)] = 255
-        
-        # work on defining perspective transformation area
-        img_size = (image.shape[1], image.shape[0])
-        src = np.float32([[image.shape[1]*(0.535 - self.mid_width/2), image.shape[0]*self.height_pct],
-                          [image.shape[1]*(0.5 + self.mid_width/2), image.shape[0]*self.height_pct],
-                          [image.shape[1]*(0.495 + self.bot_width/2), self.bottom_trim*image.shape[0]],
-                          [image.shape[1]*(0.56 - self.bot_width/2), self.bottom_trim*image.shape[0]]])
-        
-        #for debugging, draw the trapezoid on the image
-        if self.debug:
-            image = self.draw_trapezoid(image, src)
-            
-        offset = img_size[0]*0.25
-        dst = np.float32([[offset,0], 
-                          [img_size[0] - offset, 0],
-                          [img_size[0] - offset, img_size[1]],
-                          [offset, img_size[1]]])
-        M = cv2.getPerspectiveTransform(src, dst)
-        Minv = cv2.getPerspectiveTransform(dst, src)
-        warped = cv2.warpPerspective(preprocessImage, M, img_size, flags=cv2.INTER_LINEAR)
-        
-        window_width = 25
-        window_height = 80
-        
-        # set up the overall class to do all the tracking
-        curve_centers = tracker(Mywindow_width = window_width,
-                                Mywindow_height = window_height,
-                                Mymargin = 25,
-                                My_ym = 10/720,
-                                My_xm = 4/384,
-                                Mysmooth_factor = 15)
-        window_centroids = curve_centers.find_window_centroids(warped)
-        
-        
-        return self.draw_curves(image, window_centroids, warped,
-                                window_width, window_height, 
-                                Minv, curve_centers)
     
     def process_images(self,  file_name, ksize=3):
         # get the list of names
