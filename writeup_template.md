@@ -19,14 +19,14 @@ The goals / steps of this project are the following:
 [//]: # (Image References)
 
 [image0]: ./camera_cal/calibration10.jpg "Original Distorted"
-[image1]: ./undistort_calibration10.jpg "Undistorted checkerboard"
+[image1]: ./undistored_calibration10.jpg "Undistorted checkerboard"
 [image2]: ./test_images/test1.jpg "Distorted Test Image"
 [image3]: ./preprocessed_image.jpg "Thresholded Image"
 [image4]: ./source_image.jpg "Pre-Warp Image"
 [image5]: ./sample_warped_image.jpg "Warp Image"
-[image6]: ./test_images/tracked_0.jpg "Undistorted Test Image"
+[image6]: ./test_images/tracked0.jpg "Undistorted Test Image"
 [image7]: ./examples/color_fit_lines.jpg "Fit Visual"
-[image8]: ./test_images/tracked_0.jpg "Output"
+[image8]: ./test_images/tracked0.jpg "Output"
 [video1]: ./project_video.mp4 "Video"
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/571/view) Points
@@ -117,7 +117,7 @@ I implemented this step in lines # through # in my code in `yet_another_file.py`
 
 ####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).
 
-Here's a [link to my video result](./project_video.mp4)
+Here's a [link to my video result. the raw file found at output_images/project_video.mp4](https://youtu.be/HPieR5GHkVE)
 
 ---
 
