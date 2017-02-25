@@ -19,6 +19,7 @@ class Image():
         self.height_pct = 0.62 # percent for trapezoid height
         self.bottom_trim = 0.935 # percent from top to bottom to avoid car hood
         self.threshold = Threshold(3)
+        self.first_image = True
     
     def window_mask(self, width, height, img_ref, center, level):
         output = np.zeros_like(img_ref)
@@ -35,11 +36,7 @@ class Image():
         cv2.line(image, (src[3][0],src[3][1] ), (src[0][0], src[0][1]),( 110, 220, 0 ),5)
         return image
 
-    def calc_curves(self, image):
-        # A function that takes an image, object points, and image points
-        # performs the camera calibration, image distortion correction and 
-        # returns the undistorted image
-        image = cv2.undistort(image, self.mtx, self.dist, None, self.mtx)
+    def warp_image(self,image):
         preprocessImage = np.zeros_like(image[:,:,0])
         # calculate the various thresholds
         gradx = self.threshold.abs_sobel_thresh(image, orient='x', thresh=(12, 255))
@@ -58,7 +55,6 @@ class Image():
         #for debugging, draw the trapezoid on the image
         if self.debug:
             image = self.draw_trapezoid(image, src)
-            
         offset = img_size[0]*0.25
         dst = np.float32([[offset,0], 
                           [img_size[0] - offset, 0],
@@ -67,7 +63,27 @@ class Image():
         M = cv2.getPerspectiveTransform(src, dst)
         Minv = cv2.getPerspectiveTransform(dst, src)
         warped = cv2.warpPerspective(preprocessImage, M, img_size, flags=cv2.INTER_LINEAR)
+        if self.first_image:
+            self.first_image = False
+            write_name = 'preprocessed_image.jpg'
+            cv2.imwrite(write_name, preprocessImage)
+            write_name = 'source_image.jpg'
+            image = self.draw_trapezoid(image, src)
+            cv2.imwrite(write_name, image)
+            write_name = 'sample_warped_image.jpg'
+            dest_warped = self.draw_trapezoid(warped, dst)
+            cv2.imwrite(write_name, dest_warped)
+        return (warped, M, Minv, src, dst)
+    
+    def calc_curves(self, image):
+        # A function that takes an image, object points, and image points
+        # performs the camera calibration, image distortion correction and 
+        # returns the undistorted image
+        image = cv2.undistort(image, self.mtx, self.dist, None, self.mtx)
         
+        (warped, M, Minv, src, dst) = self.warp_image(image)
+        img_size = (image.shape[1], image.shape[0])
+
         window_width = 25
         window_height = 80
         

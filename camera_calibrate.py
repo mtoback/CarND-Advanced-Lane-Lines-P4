@@ -15,6 +15,7 @@ def main():
     # Make a list of calibration images
     images = glob.glob('camera_cal/calibration*.jpg')
     first_image_found = None
+    undistort_this = False # if found first image, set to true and 
     # Step through the list and search for chessboard corners
     for idx, fname in enumerate(images):
         img = cv2.imread(fname)
@@ -42,6 +43,10 @@ def main():
     # do camera calibration given object points and image points
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints,
                                             img_size, None, None)
+    # undistort an image and write it out to disk
+    image = cv2.undistort(img, mtx, dist, None, mtx)
+    write_name = 'undistored_'+ first_image_found.split('\\')[1]
+    cv2.imwrite(write_name, img)
     # save the camera calibration result for later use (we don't worry about rvecs/tvecs)
     dist_pickle = {}
     dist_pickle['mtx'] = mtx
