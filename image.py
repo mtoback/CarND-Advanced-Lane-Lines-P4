@@ -6,6 +6,7 @@ import pickle
 from skimage.feature._canny import canny
 from threshold import Threshold
 from tracker import tracker
+from click.testing import Result
 
 class Image():
     def __init__(self, ksize=3, debug=False):
@@ -20,13 +21,15 @@ class Image():
         self.bottom_trim = 0.935 # percent from top to bottom to avoid car hood
         self.threshold = Threshold(3)
         self.first_image = True
+        self.window_width = 25
+        self.window_height = 80
     
-    def window_mask(self, width, height, img_ref, center, level):
+    def window_mask(self, img_ref, center, level):
         output = np.zeros_like(img_ref)
         output[int(img_ref.shape[0] - 
-                   (level+1)*height) : int(img_ref.shape[0] - level*height),
-                                    max(0, int(center - width)):
-                                    min(int(center + width), img_ref.shape[1])] = 1
+                   (level+1)*self.window_height) : int(img_ref.shape[0] - level*self.window_height),
+                                    max(0, int(center - self.window_width)):
+                                    min(int(center + self.window_width), img_ref.shape[1])] = 1
         return output
             
     def draw_trapezoid(self,image, src):
@@ -75,21 +78,57 @@ class Image():
             cv2.imwrite(write_name, dest_warped)
         return (warped, M, Minv, src, dst)
     
-    def calc_curves(self, image):
-        # A function that takes an image, object points, and image points
-        # performs the camera calibration, image distortion correction and 
-        # returns the undistorted image
-        image = cv2.undistort(image, self.mtx, self.dist, None, self.mtx)
+    def fit_to_center(self, warped, yvals, leftx, rightx, res_yvals):
+        # fit to box centers
         
-        (warped, M, Minv, src, dst) = self.warp_image(image)
-        img_size = (image.shape[1], image.shape[0])
+        # polynomial fit to a second order polynomial
+        left_fit = np.polyfit(res_yvals, leftx, 2)
+        left_fitx = left_fit[0] * yvals * yvals + left_fit[1] * yvals + left_fit[2]
+        left_fitx = np.array(left_fitx, np.int32)
+        
+        # polynomial fit to a second order polynomial
+        right_fit = np.polyfit(res_yvals, rightx, 2)
+        right_fitx = right_fit[0] * yvals * yvals + right_fit[1] * yvals + right_fit[2]
+        right_fitx = np.array(right_fitx, np.int32)
+    
+    
+        left_lane = np.array(list(zip(np.concatenate((left_fitx - self.window_width/2,
+                            left_fitx[::-1] + self.window_width/2), axis=0),
+                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+        right_lane = np.array(list(zip(np.concatenate((right_fitx - self.window_width/2, 
+                            right_fitx[::-1] + self.window_width/2), axis=0),
+                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+        inner_lane = np.array(list(zip(np.concatenate((left_fitx + self.window_width/2, 
+                            right_fitx[::-1] - self.window_width/2), axis=0),
+                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+        middle_marker = np.array(list(zip(np.concatenate((right_fitx + self.window_width/2, 
+                            right_fitx[::-1] + self.window_width/2), axis=0),
+                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+        return (left_lane, right_lane, inner_lane, middle_marker, left_fitx, right_fitx)
 
-        window_width = 25
-        window_height = 80
+    def draw_the_road(self, image, left_lane, right_lane, inner_lane, Minv):
+        img_size = (image.shape[1], image.shape[0])
+        # color in the lines (road) and clear out in the original lines (road_bkg)
+        road = np.zeros_like(image)
+        road_bkg = np.zeros_like(image)
+        cv2.fillPoly(road,[left_lane], color=[255, 0, 0])
+        cv2.fillPoly(road,[right_lane], color=[0, 0, 255])
+        cv2.fillPoly(road,[inner_lane], color=[0, 255, 0])
+        cv2.fillPoly(road_bkg,[left_lane], color=[255, 255, 255])
+        cv2.fillPoly(road_bkg,[right_lane], color=[255, 255, 255])
         
+        # Overlay lines onto the road surface
+        road_warped = cv2.warpPerspective(road, Minv, img_size, flags=cv2.INTER_LINEAR)
+        road_warped_bkg = cv2.warpPerspective(road_bkg, Minv, img_size, flags=cv2.INTER_LINEAR)
+    
+        base = cv2.addWeighted(image, 1.0, road_warped_bkg, -1.0, 0.0)
+        result = cv2.addWeighted(base, 1.0, road_warped, 0.7, 0.0)
+        return result
+    
+    def track_the_road(self, warped):
         # set up the overall class to do all the tracking
-        curve_centers = tracker(Mywindow_width = window_width,
-                                Mywindow_height = window_height,
+        curve_centers = tracker(Mywindow_width = self.window_width,
+                                Mywindow_height = self.window_height,
                                 Mymargin = 25,
                                 My_ym = 10/720,
                                 My_xm = 4/384,
@@ -107,14 +146,10 @@ class Image():
         # Go through each level and draw the windows
         for level in range(0, len(window_centroids)):
             # window_mask is a function to draw window areas
-            l_mask = self.window_mask(window_width,
-                                 window_height,
-                                 warped,
+            l_mask = self.window_mask(warped,
                                  window_centroids[level][0],
                                  level)
-            r_mask = self.window_mask(window_width,
-                                 window_height,
-                                 warped,
+            r_mask = self.window_mask(warped,
                                  window_centroids[level][1],
                                  level)
             # add center value found in frame to the list of lane point per left, right
@@ -131,55 +166,11 @@ class Image():
         template = np.array(cv2.merge((zero_channel, template, zero_channel)), np.uint8) # make window pixels green
         warpage = np.array(cv2.merge((warped, warped, warped)), np.uint8) # making the original road pixels 3 color channels
         result = cv2.addWeighted(warpage, 1, template, 0.5, 0.0) # overlay the original road image with window results
+        return (result, leftx, rightx, curve_centers, template)
         
-        # Fit the lane boundaries to the left, right center positions found
-        # yvals is height
-        yvals = range(0, warped.shape[0]) 
-        
-        # fit to box centers
-        res_yvals = np.arange(warped.shape[0] - (window_height/2),
-                              0, -window_height)
-        
-        # polynomial fit to a second order polynomial
-        left_fit = np.polyfit(res_yvals, leftx, 2)
-        left_fitx = left_fit[0] * yvals * yvals + left_fit[1] * yvals + left_fit[2]
-        left_fitx = np.array(left_fitx, np.int32)
-        
-        # polynomial fit to a second order polynomial
-        right_fit = np.polyfit(res_yvals, rightx, 2)
-        right_fitx = right_fit[0] * yvals * yvals + right_fit[1] * yvals + right_fit[2]
-        right_fitx = np.array(right_fitx, np.int32)
-    
-    
-        left_lane = np.array(list(zip(np.concatenate((left_fitx - window_width/2,
-                            left_fitx[::-1] + window_width/2), axis=0),
-                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
-        right_lane = np.array(list(zip(np.concatenate((right_fitx - window_width/2, 
-                            right_fitx[::-1] + window_width/2), axis=0),
-                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
-        inner_lane = np.array(list(zip(np.concatenate((left_fitx + window_width/2, 
-                            right_fitx[::-1] - window_width/2), axis=0),
-                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
-        middle_marker = np.array(list(zip(np.concatenate((right_fitx + window_width/2, 
-                            right_fitx[::-1] + window_width/2), axis=0),
-                            np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
-        
-        # color in the lines (road) and clear out in the original lines (road_bkg)
-        road = np.zeros_like(image)
-        road_bkg = np.zeros_like(image)
-        cv2.fillPoly(road,[left_lane], color=[255, 0, 0])
-        cv2.fillPoly(road,[right_lane], color=[0, 0, 255])
-        cv2.fillPoly(road,[inner_lane], color=[0, 255, 0])
-        cv2.fillPoly(road_bkg,[left_lane], color=[255, 255, 255])
-        cv2.fillPoly(road_bkg,[right_lane], color=[255, 255, 255])
-        
-        # Overlay lines onto the road surface
-        road_warped = cv2.warpPerspective(road, Minv, img_size, flags=cv2.INTER_LINEAR)
-        road_warped_bkg = cv2.warpPerspective(road_bkg, Minv, img_size, flags=cv2.INTER_LINEAR)
-    
-        base = cv2.addWeighted(image, 1.0, road_warped_bkg, -1.0, 0.0)
-        result = cv2.addWeighted(base, 1.0, road_warped, 0.7, 0.0)
-    
+    def build_the_image(self, result, curve_centers, res_yvals, leftx,
+                                      yvals, left_fitx, right_fitx, 
+                                      template, warped):
         # calculate the offset of the car on the road and 
         # figure out if it's in the right or left lane
         # and scale to meters
@@ -210,13 +201,40 @@ class Image():
                     'm ' + side_pos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255),2)
         return result
     
+    def calc_curves(self, image, warped, Minv):
+        # A function that takes an image, object points, and image points
+        # performs the camera calibration, image distortion correction and 
+        # returns the undistorted image
+        img_size = (image.shape[1], image.shape[0])
+
+        (result, leftx, rightx, curve_centers, template) = self.track_the_road(warped)
+
+        # Fit the lane boundaries to the left, right center positions found
+        # yvals is height
+        yvals = range(0, warped.shape[0]) 
+        res_yvals = np.arange(warped.shape[0] - (self.window_height/2),
+                              0, -self.window_height)
+        
+        (left_lane, right_lane, inner_lane, middle_marker, left_fitx, right_fitx) = self.fit_to_center(warped, yvals,
+                                                                        leftx, rightx, res_yvals)
+        
+        
+        result = self.draw_the_road(image, left_lane, right_lane, inner_lane, Minv)
+    
+        result = self.build_the_image(result, curve_centers, res_yvals, leftx,
+                                      yvals, left_fitx, right_fitx, template, warped)
+        return result
+
     def process_images(self,  file_name, ksize=3):
         # get the list of names
         images = glob.glob(file_name)
         for idx, fname in enumerate(images):
             # read file and undistort it
             image = cv2.imread(fname)
-            result = self.calc_curves(image)
+            image = cv2.undistort(image, self.mtx, self.dist, None, self.mtx)
+            
+            (warped, M, Minv, src, dst) = self.warp_image(image)
+            result = self.calc_curves(image, warped, Minv)
             write_name = './test_images/tracked' + str(idx) + '.jpg'
             cv2.imwrite(write_name, result)
         

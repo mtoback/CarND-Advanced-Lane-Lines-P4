@@ -1,6 +1,7 @@
 from image import Image
 import imageio
-
+import cv2
+import pickle
 class Video():
     def __init__(self, ksize=3, debug=False):
         self.image = Image(ksize, debug)
@@ -23,7 +24,9 @@ class Video():
         num = 0
         image = self.get_image_from_mp4(reader, num)
         while image != None:
-            result = self.image.calc_curves(image)
+            image = cv2.undistort(image, self.image.mtx, self.image.dist, None, self.image.mtx)         
+            (warped, M, Minv, src, dst) = self.image.warp_image(image)
+            result = self.image.calc_curves(image, warped, Minv)
             writer.append_data(result[:,:,:])
             num = num + 1
             image = self.get_image_from_mp4(reader, num)
@@ -31,6 +34,6 @@ class Video():
             
 def main():
     video_proc = Video(3, debug=False)
-    video_proc.run_video('challenge_video.mp4', 'output_images/challenge_output.mp4')
+    video_proc.run_video('project_video.mp4', 'output_images/project_output.mp4')
 if __name__ == "__main__":
     main()
