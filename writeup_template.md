@@ -144,6 +144,8 @@ I used a simple algorithm for finding the lane lines which accepted every result
 As you see, there are three frames in the middle of this sequence where the right lane jumps over 300 px then jumps back again. What I discovered was that I was redefining the tracker on every single frame, rather than saving it, so that the tracker was never smoothing.
 Making the tracker an instance level object fixed that, but instead what you see is a slow drift away and back to the lane line as it hits and leaves the curve.
 
+I uploaded the video as output_images/challenge_output_corrected.mp4. You can also view it [here](https://youtu.be/bT3-NK4EctA)
+
 Also, I noticed that the list of centroids grew without limit, when all we need was the size of the smoothing. So I added a check for the length of the list and remove the first item if the length exceeded the smoothing size.
 
 I believe the problem is the length of the trapezoid. The algorithm attempts to define a single second order polynomial along the entire length of the trapezoid. By reducing the height of the trapezoid for the challenge video I think I would get a much better result.
