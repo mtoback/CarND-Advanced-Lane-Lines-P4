@@ -2,6 +2,7 @@ from image import Image
 import imageio
 import cv2
 import pickle
+import sys
 class Video():
     def __init__(self, ksize=3, debug=False):
         self.image = Image(ksize, debug)
@@ -34,6 +35,6 @@ class Video():
             
 def main():
     video_proc = Video(3, debug=False)
-    video_proc.run_video('project_video.mp4', 'output_images/project_output.mp4')
+    video_proc.run_video('challenge_video.mp4', 'output_images/challenge_output_corrected.mp4')
 if __name__ == "__main__":
     main()

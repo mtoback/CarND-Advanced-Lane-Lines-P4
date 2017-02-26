@@ -125,5 +125,28 @@ Here's a [link to my video result. the raw file found at output_images/project_v
 
 ####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+I used a simple algorithm for finding the lane lines which accepted every result. However, when going around a curve with the challenge video, the lines would jump, especially the right lane line. For example, I printed out the right and left lane average centroid values (from the leftx, rightx variables defined at lines 148-161 in image.py):
+| Left Lane     | Right Lane    | 
+|:-------------:|:-------------:| 
+| 399.6         | 854.6         | 
+| 396.4         | 850.4         |
+| 392.7         | 845.6         |
+| 391.3         | 818.6         |
+| 391.4         | 827.7         |
+| 395.5         | 1129.4        |
+| 364.1         | 1163.2        |
+| 413.3         | 1103.8        |
+| 378.6         | 786.5         |
+| 409.3         | 789.8         |
+| 380.6         | 788.7         |
+| 380.6         | 788.7         |
+
+As you see, there are three frames in the middle of this sequence where the right lane jumps over 300 px then jumps back again. What I discovered was that I was redefining the tracker on every single frame, rather than saving it, so that the tracker was never smoothing.
+Making the tracker an instance level object fixed that, but instead what you see is a slow drift away and back to the lane line as it hits and leaves the curve.
+
+Also, I noticed that the list of centroids grew without limit, when all we need was the size of the smoothing. So I added a check for the length of the list and remove the first item if the length exceeded the smoothing size.
+
+I believe the problem is the length of the trapezoid. The algorithm attempts to define a single second order polynomial along the entire length of the trapezoid. By reducing the height of the trapezoid for the challenge video I think I would get a much better result.
+
+Another possibility would be to increase the order of the polynomial.
 

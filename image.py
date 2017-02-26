@@ -7,7 +7,7 @@ from skimage.feature._canny import canny
 from threshold import Threshold
 from tracker import tracker
 from click.testing import Result
-
+import math
 class Image():
     def __init__(self, ksize=3, debug=False):
         data = pickle.load( open('./calibration_pickle.p', 'rb'))
@@ -23,7 +23,14 @@ class Image():
         self.first_image = True
         self.window_width = 25
         self.window_height = 80
-    
+        self.last_right_lane_average = -1000
+        self.last_right_lane = None
+        self.curve_centers = tracker(Mywindow_width = self.window_width,
+                                Mywindow_height = self.window_height,
+                                Mymargin = 25,
+                                My_ym = 10/720,
+                                My_xm = 4/384,
+                                Mysmooth_factor = 15)
     def window_mask(self, img_ref, center, level):
         output = np.zeros_like(img_ref)
         output[int(img_ref.shape[0] - 
@@ -127,13 +134,7 @@ class Image():
     
     def track_the_road(self, warped):
         # set up the overall class to do all the tracking
-        curve_centers = tracker(Mywindow_width = self.window_width,
-                                Mywindow_height = self.window_height,
-                                Mymargin = 25,
-                                My_ym = 10/720,
-                                My_xm = 4/384,
-                                Mysmooth_factor = 15)
-        window_centroids = curve_centers.find_window_centroids(warped)
+        window_centroids = self.curve_centers.find_window_centroids(warped)
         
         # points used to draw all  the left and right windows
         l_points = np.zeros_like(warped)
@@ -166,17 +167,17 @@ class Image():
         template = np.array(cv2.merge((zero_channel, template, zero_channel)), np.uint8) # make window pixels green
         warpage = np.array(cv2.merge((warped, warped, warped)), np.uint8) # making the original road pixels 3 color channels
         result = cv2.addWeighted(warpage, 1, template, 0.5, 0.0) # overlay the original road image with window results
-        return (result, leftx, rightx, curve_centers, template)
+        return (result, leftx, rightx, template)
         
-    def build_the_image(self, result, curve_centers, res_yvals, leftx,
+    def build_the_image(self, result, res_yvals, leftx,
                                       yvals, left_fitx, right_fitx, 
                                       template, warped):
         # calculate the offset of the car on the road and 
         # figure out if it's in the right or left lane
         # and scale to meters
         # the -1 position is closest to the car
-        ym_per_pix = curve_centers.ym_per_pix # meters per pixel in y direction
-        xm_per_pix = curve_centers.xm_per_pix # meters per pixel in x direction
+        ym_per_pix = self.curve_centers.ym_per_pix # meters per pixel in y direction
+        xm_per_pix = self.curve_centers.xm_per_pix # meters per pixel in x direction
         
         # we want curvature in meters using the left lane to calculate the value
         # we could do the right, left + right average, or create a whole new middle line
@@ -207,7 +208,7 @@ class Image():
         # returns the undistorted image
         img_size = (image.shape[1], image.shape[0])
 
-        (result, leftx, rightx, curve_centers, template) = self.track_the_road(warped)
+        (result, leftx, rightx, template) = self.track_the_road(warped)
 
         # Fit the lane boundaries to the left, right center positions found
         # yvals is height
@@ -217,11 +218,10 @@ class Image():
         
         (left_lane, right_lane, inner_lane, middle_marker, left_fitx, right_fitx) = self.fit_to_center(warped, yvals,
                                                                         leftx, rightx, res_yvals)
-        
-        
+            
         result = self.draw_the_road(image, left_lane, right_lane, inner_lane, Minv)
     
-        result = self.build_the_image(result, curve_centers, res_yvals, leftx,
+        result = self.build_the_image(result, res_yvals, leftx,
                                       yvals, left_fitx, right_fitx, template, warped)
         return result
 

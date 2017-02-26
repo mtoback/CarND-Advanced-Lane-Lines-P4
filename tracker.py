@@ -4,8 +4,8 @@ from ipywidgets.widgets.widget_controller import Axis
 class tracker():
     
     # initialize the class
-    # Mywindow_width - image window width
-    # Mywindow_height - image window height
+    # Mywindow_width - sliding image window width
+    # Mywindow_height - sliding image window height
     # Mymargin - number of pixels that we are allowing for sliding the window
     # as part of the correlation analysis
     # My_ym - Meters per pixel along the y axis
@@ -13,7 +13,7 @@ class tracker():
     # Mysmooth_factor - how many prior values to be used to smooth out the center estimate
     def __init__(self, Mywindow_width, Mywindow_height, Mymargin,
                  My_ym = 1, My_xm = 1, Mysmooth_factor = 15):
-        # list that stors all the past (left, right) center set values 
+        # list that stores all the past (left, right) center set values 
         # used for smoothing the output with the smoothing factor
         self.recent_centers = []
         
@@ -84,7 +84,8 @@ class tracker():
             r_center = np.argmax(conv_signal[r_min_index : r_max_index]) + r_min_index - offset 
             # add what we found for that layer 
             window_centroids.append((l_center, r_center))
-            
         self.recent_centers.append(window_centroids)
+        if len(self.recent_centers) == self.smooth_factor + 1:
+            del self.recent_centers[0]
         # return averaged values of the line centers, helps to keep the markers from jumping around too much
         return np.average(self.recent_centers[-self.smooth_factor:], axis=0)
